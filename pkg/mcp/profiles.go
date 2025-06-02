@@ -1,8 +1,9 @@
 package mcp
 
 import (
-	"github.com/mark3labs/mcp-go/server"
 	"slices"
+
+	"github.com/mark3labs/mcp-go/server"
 )
 
 var Profiles = []Profile{
@@ -42,6 +43,7 @@ func (p *FullProfile) GetTools(s *Server) []server.ServerTool {
 		s.initPods(),
 		s.initResources(),
 		s.initHelm(),
+		s.initMustGather(),
 	)
 }
 
