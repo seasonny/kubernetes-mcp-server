@@ -4,6 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/manusa/kubernetes-mcp-server/pkg/mcp"
 	"github.com/manusa/kubernetes-mcp-server/pkg/version"
 	"github.com/mark3labs/mcp-go/server"
@@ -12,9 +16,6 @@ import (
 	"golang.org/x/net/context"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/textlogger"
-	"os"
-	"strconv"
-	"strings"
 )
 
 var rootCmd = &cobra.Command{

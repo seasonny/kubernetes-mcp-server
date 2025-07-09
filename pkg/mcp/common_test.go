@@ -4,6 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -26,18 +33,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 	toolswatch "k8s.io/client-go/tools/watch"
 	"k8s.io/utils/ptr"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/env"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/remote"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/store"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/versions"
 	"sigs.k8s.io/controller-runtime/tools/setup-envtest/workflows"
-	"testing"
-	"time"
 )
 
 // envTest has an expensive setup, so we only want to do it once per entire test run.
@@ -103,6 +104,7 @@ type mcpContext struct {
 	after              func(*mcpContext)
 	ctx                context.Context
 	tempDir            string
+	kubeConfigPath     string
 	cancel             context.CancelFunc
 	mcpServer          *Server
 	mcpHttpServer      *httptest.Server
@@ -113,6 +115,7 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	var err error
 	c.ctx, c.cancel = context.WithCancel(t.Context())
 	c.tempDir = t.TempDir()
+	c.kubeConfigPath = filepath.Join(c.tempDir, "config")
 	c.withKubeConfig(nil)
 	if c.profile == nil {
 		c.profile = &FullProfile{}
@@ -120,13 +123,14 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	if c.before != nil {
 		c.before(c)
 	}
+	c.mcpHttpServer = server.NewTestServer(c.mcpServer.server, server.WithSSEContextFunc(contextFunc))
 	if c.mcpServer, err = NewSever(Configuration{
 		Profile: c.profile, ReadOnly: c.readOnly, DisableDestructive: c.disableDestructive,
+		Kubeconfig: c.kubeConfigPath,
 	}); err != nil {
 		t.Fatal(err)
 		return
 	}
-	c.mcpHttpServer = server.NewTestServer(c.mcpServer.server, server.WithSSEContextFunc(contextFunc))
 	if c.mcpClient, err = client.NewSSEMCPClient(c.mcpHttpServer.URL+"/sse", c.clientOptions...); err != nil {
 		t.Fatal(err)
 		return

@@ -2,11 +2,12 @@ package mcp
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/manusa/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/manusa/kubernetes-mcp-server/pkg/version"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"net/http"
 )
 
 type Configuration struct {
@@ -22,6 +23,7 @@ type Server struct {
 	configuration *Configuration
 	server        *server.MCPServer
 	k             *kubernetes.Kubernetes
+	httpClient    *http.Client
 }
 
 func NewSever(configuration Configuration) (*Server, error) {
@@ -35,6 +37,7 @@ func NewSever(configuration Configuration) (*Server, error) {
 			server.WithToolCapabilities(true),
 			server.WithLogging(),
 		),
+		httpClient: &http.Client{},
 	}
 	if err := s.reloadKubernetesClient(); err != nil {
 		return nil, err
