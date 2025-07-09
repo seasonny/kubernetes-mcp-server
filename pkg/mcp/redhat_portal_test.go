@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -16,51 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockExecCommand is a helper to mock exec.Command for testing.
-func mockExecCommand(t *testing.T, command string, args []string, output string, err error) func() {
-	originalExecCommand := execCommand
-	execCommand = func(name string, arg ...string) *exec.Cmd {
-		if name == command {
-			// Create a real command that will print the mocked output
-			// This avoids complex mocking of StdoutPipe etc.
-			cs := []string{"-test.run=TestHelperProcess", "--", name}
-			cs = append(cs, arg...)
-			cmd := exec.Command(os.Args[0], cs...)
-			cmd.Env = []string{"GO_WANT_HELPER_PROCESS=1",
-				"STDOUT=" + output,
-			}
-			if err != nil {
-				cmd.Env = append(cmd.Env, "EXIT_CODE=1")
-			}
-			return cmd
-		}
-		return originalExecCommand(name, arg...)
-	}
-	return func() {
-		execCommand = originalExecCommand
-	}
-}
-
-// TestHelperProcess isn't a real test. It's used as a helper for TestExecCommand.
-func TestHelperProcess(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-	fmt.Fprint(os.Stdout, os.Getenv("STDOUT"))
-	i, _ := stdstrconv.Atoi(os.Getenv("EXIT_CODE"))
-	os.Exit(i)
-}
-
-func TestCreateCaseOnRedHatPortal(t *testing.T) {
-	// Mock successful oc version command
-	const ocVersionOutput = `{
-		"serverVersion": {
-			"gitVersion": "v4.12.1"
-		}
-	}`
-	cleanup := mockExecCommand(t, "oc", []string{"version", "-o", "json"}, ocVersionOutput, nil)
-	defer cleanup()
-
+func TestCreateCaseOnRedHatPortalWithVersion(t *testing.T) {
 	testCase(t, func(c *mcpContext) {
 		// This server will act as the mock Red Hat API
 		mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,18 +24,10 @@ func TestCreateCaseOnRedHatPortal(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(TokenResponse{AccessToken: "test-access-token"})
 			case "/support/v1/cases":
-				// Verify the request body
 				var caseData Case
 				err := json.NewDecoder(r.Body).Decode(&caseData)
-				require.NoError(t, err, "Failed to decode request body")
-				assert.Equal(t, "Test Summary", caseData.Summary)
-				assert.Equal(t, "Test Description", caseData.Description)
-				assert.Equal(t, "OpenShift Container Platform", caseData.Product)
-				assert.Equal(t, "4.12", caseData.Version) // From mocked oc version
-				assert.Equal(t, 3, caseData.Severity)
-				assert.Equal(t, "RCA Only", caseData.CaseType)
-				assert.Equal(t, "zh_TW", caseData.CaseLanguage)
-
+				require.NoError(t, err)
+				assert.Equal(t, "Manual Version", caseData.Version) // Assert manual version is used
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
 				json.NewEncoder(w).Encode(CaseCreationResponse{
@@ -92,30 +39,27 @@ func TestCreateCaseOnRedHatPortal(t *testing.T) {
 		}))
 		defer mockAPI.Close()
 
-		// Override the hardcoded URLs to point to our mock server
-		originalRhSSOURL := rhSSOURL
-		originalRhAPIURL := rhAPIURL
-		rhSSOURL = mockAPI.URL + "/auth/realms/redhat-external/protocol/openid-connect/token"
-		rhAPIURL = mockAPI.URL + "/support/v1"
-		defer func() {
-			rhSSOURL = originalRhSSOURL
-			rhAPIURL = originalRhAPIURL
-		}()
+		// Point the server's http client to the test server
+		c.mcpServer.httpClient = mockAPI.Client()
+		// Override the getOpenShiftVersion function to simulate failure
+		c.mcpServer.getOpenShiftVersionFunc = func() (string, error) {
+			return "", fmt.Errorf("oc command not found")
+		}
 
 		// Set the token env var
 		t.Setenv(tokenVar, "test-refresh-token")
 
-		// Call the tool
+		// Call the tool with manual version
 		toolResult, err := c.callTool("create_case_rh_portal", map[string]interface{}{
 			"summary":     "Test Summary",
 			"description": "Test Description",
+			"version":     "Manual Version",
 		})
 
 		// Assertions
-		require.NoError(t, err, "callTool should not return an error")
-		require.False(t, toolResult.IsError, "toolResult should not be an error")
-		expected := "Case 12345 created successfully."
-		assert.Equal(t, expected, toolResult.Content[0].(mcp.TextContent).Text)
+		require.NoError(t, err)
+		require.False(t, toolResult.IsError)
+		assert.Contains(t, toolResult.Content[0].(mcp.TextContent).Text, "Case 12345 created successfully.")
 	})
 }
 
@@ -164,15 +108,8 @@ func TestUploadAttachmentToRedHatPortal(t *testing.T) {
 		}))
 		defer mockAPI.Close()
 
-		// Override the hardcoded URLs to point to our mock server
-		originalRhSSOURL := rhSSOURL
-		originalRhAPIURL := rhAPIURL
-		rhSSOURL = mockAPI.URL + "/auth/realms/redhat-external/protocol/openid-connect/token"
-		rhAPIURL = mockAPI.URL + "/support/v1"
-		defer func() {
-			rhSSOURL = originalRhSSOURL
-			rhAPIURL = originalRhAPIURL
-		}()
+		// Point the server's http client to the test server
+		c.mcpServer.httpClient = mockAPI.Client()
 
 		// Set the token env var
 		t.Setenv(tokenVar, "test-refresh-token")

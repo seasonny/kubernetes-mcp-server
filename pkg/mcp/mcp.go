@@ -20,10 +20,11 @@ type Configuration struct {
 }
 
 type Server struct {
-	configuration *Configuration
-	server        *server.MCPServer
-	k             *kubernetes.Kubernetes
-	httpClient    *http.Client
+	configuration           *Configuration
+	server                  *server.MCPServer
+	k                       *kubernetes.Kubernetes
+	httpClient              *http.Client
+	getOpenShiftVersionFunc func() (string, error)
 }
 
 func NewSever(configuration Configuration) (*Server, error) {
@@ -39,6 +40,7 @@ func NewSever(configuration Configuration) (*Server, error) {
 		),
 		httpClient: &http.Client{},
 	}
+	s.getOpenShiftVersionFunc = s.getOpenShiftVersion
 	if err := s.reloadKubernetesClient(); err != nil {
 		return nil, err
 	}

@@ -78,13 +78,13 @@ type Attachment struct {
 }
 
 // getAccessToken retrieves an access token from Red Hat SSO using a refresh token.
-func (s *Server) getAccessToken(refreshToken string) (string, error) {
+func (s *Server) getAccessToken(ssoURL, refreshToken string) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", rhClientID)
 	data.Set("refresh_token", refreshToken)
 
-	req, err := http.NewRequest("POST", rhSSOURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequest("POST", ssoURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", err
 	}
@@ -111,13 +111,13 @@ func (s *Server) getAccessToken(refreshToken string) (string, error) {
 }
 
 // createCase creates a new support case on the Red Hat Customer Portal.
-func (s *Server) createCase(accessToken string, caseData Case) (string, error) {
+func (s *Server) createCase(apiURL, accessToken string, caseData Case) (string, error) {
 	jsonData, err := json.Marshal(caseData)
 	if err != nil {
 		return "", err
 	}
 
-	req, err := http.NewRequest("POST", rhAPIURL+"/cases", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", apiURL+"/cases", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return "", err
 	}
@@ -153,7 +153,7 @@ func (s *Server) createCase(accessToken string, caseData Case) (string, error) {
 }
 
 // uploadAttachment uploads a file to a support case.
-func (s *Server) uploadAttachment(accessToken, caseNumber, filePath string) (*Attachment, error) {
+func (s *Server) uploadAttachment(apiURL, accessToken, caseNumber, filePath string) (*Attachment, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, err
@@ -177,7 +177,7 @@ func (s *Server) uploadAttachment(accessToken, caseNumber, filePath string) (*At
 		}
 	}()
 
-	req, err := http.NewRequest("POST", rhAPIURL+"/cases/"+caseNumber+"/attachments", pr)
+	req, err := http.NewRequest("POST", apiURL+"/cases/"+caseNumber+"/attachments", pr)
 	if err != nil {
 		return nil, err
 	}
@@ -221,29 +221,43 @@ func (s *Server) getOpenShiftVersion() (string, error) {
 	}
 
 	var versionInfo struct {
-		ClientVersion struct {
-			GitVersion string `json:"gitVersion"`
-		} `json:"clientVersion"`
 		ServerVersion struct {
 			Major      string `json:"major"`
 			Minor      string `json:"minor"`
 			GitVersion string `json:"gitVersion"`
 		} `json:"serverVersion"`
+		OpenshiftVersion string `json:"openshiftVersion"` // Add this field
 	}
 
 	if err := json.Unmarshal(output, &versionInfo); err != nil {
 		return "", fmt.Errorf("failed to parse 'oc version' output: %w", err)
 	}
 
-	if versionInfo.ServerVersion.GitVersion != "" {
-		// Extract X.Y from "vX.Y.Z"
-		parts := strings.Split(strings.TrimPrefix(versionInfo.ServerVersion.GitVersion, "v"), ".")
+	// Prefer openshiftVersion field
+	if versionInfo.OpenshiftVersion != "" {
+		// Extract X.Y from "X.Y.Z"
+		parts := strings.Split(versionInfo.OpenshiftVersion, ".")
 		if len(parts) >= 2 {
-			return parts[0] + "." + parts[1], nil
+			return fmt.Sprintf("%s.%s", parts[0], parts[1]), nil
 		}
 	}
 
-	return "", errors.New("could not determine OpenShift server version")
+	// Fallback to ServerVersion.Major and ServerVersion.Minor
+	if versionInfo.ServerVersion.Major != "" && versionInfo.ServerVersion.Minor != "" {
+		return fmt.Sprintf("%s.%s", versionInfo.ServerVersion.Major, versionInfo.ServerVersion.Minor), nil
+	}
+
+	// Fallback to parsing ServerVersion.GitVersion
+	if versionInfo.ServerVersion.GitVersion != "" {
+		// Extract X.Y from "vX.Y.Z" or "X.Y.Z"
+		versionStr := strings.TrimPrefix(versionInfo.ServerVersion.GitVersion, "v")
+		parts := strings.Split(versionStr, ".")
+		if len(parts) >= 2 {
+			return fmt.Sprintf("%s.%s", parts[0], parts[1]), nil
+		}
+	}
+
+	return "", errors.New("could not determine OpenShift version from 'oc version' output")
 }
 
 func getRefreshToken() (string, error) {
@@ -309,7 +323,7 @@ func (s *Server) createCaseOnRedHatPortal(ctx context.Context, request mcp.CallT
 	// Get version
 	version, _ := request.GetArguments()["version"].(string)
 	if version == "" {
-		autoVersion, err := s.getOpenShiftVersion()
+		autoVersion, err := s.getOpenShiftVersionFunc()
 		if err != nil {
 			return NewTextResult("", fmt.Errorf("failed to auto-detect OpenShift version, please provide it manually. Error: %w", err)), nil
 		}
@@ -323,7 +337,7 @@ func (s *Server) createCaseOnRedHatPortal(ctx context.Context, request mcp.CallT
 		return NewTextResult("", err), nil
 	}
 
-	accessToken, err := s.getAccessToken(referenceToken)
+	accessToken, err := s.getAccessToken(rhSSOURL, referenceToken)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to get access token: %w", err)), nil
 	}
@@ -339,7 +353,7 @@ func (s *Server) createCaseOnRedHatPortal(ctx context.Context, request mcp.CallT
 		CaseLanguage: "zh_TW",
 	}
 
-	caseNumber, err := s.createCase(accessToken, caseData)
+	caseNumber, err := s.createCase(rhAPIURL, accessToken, caseData)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to create case: %w", err)), nil
 	}
@@ -362,12 +376,12 @@ func (s *Server) uploadAttachmentToRedHatPortal(ctx context.Context, request mcp
 		return NewTextResult("", err), nil
 	}
 
-	accessToken, err := s.getAccessToken(referenceToken)
+	accessToken, err := s.getAccessToken(rhSSOURL, referenceToken)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to get access token: %w", err)), nil
 	}
 
-	attachment, err := s.uploadAttachment(accessToken, caseNumber, filePath)
+	attachment, err := s.uploadAttachment(rhAPIURL, accessToken, caseNumber, filePath)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to upload attachment: %w", err)), nil
 	}

@@ -123,7 +123,6 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 	if c.before != nil {
 		c.before(c)
 	}
-	c.mcpHttpServer = server.NewTestServer(c.mcpServer.server, server.WithSSEContextFunc(contextFunc))
 	if c.mcpServer, err = NewSever(Configuration{
 		Profile: c.profile, ReadOnly: c.readOnly, DisableDestructive: c.disableDestructive,
 		Kubeconfig: c.kubeConfigPath,
@@ -131,6 +130,7 @@ func (c *mcpContext) beforeEach(t *testing.T) {
 		t.Fatal(err)
 		return
 	}
+	c.mcpHttpServer = server.NewTestServer(c.mcpServer.server, server.WithSSEContextFunc(contextFunc))
 	if c.mcpClient, err = client.NewSSEMCPClient(c.mcpHttpServer.URL+"/sse", c.clientOptions...); err != nil {
 		t.Fatal(err)
 		return
