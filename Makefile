@@ -7,7 +7,7 @@ PACKAGE = $(shell go list -m)
 GIT_COMMIT_HASH = $(shell git rev-parse HEAD)
 GIT_VERSION = $(shell git describe --tags --always --dirty)
 BUILD_TIME = $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
-BINARY_NAME = kubernetes-mcp-server
+BINARY_NAME = rh-tam-kubernetes-mcp-server
 LD_FLAGS = -s -w \
 	-X '$(PACKAGE)/pkg/version.CommitHash=$(GIT_COMMIT_HASH)' \
 	-X '$(PACKAGE)/pkg/version.Version=$(GIT_VERSION)' \
@@ -24,7 +24,7 @@ CLEAN_TARGETS :=
 CLEAN_TARGETS += '$(BINARY_NAME)'
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)))
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/bin/))
-CLEAN_TARGETS += ./npm/kubernetes-mcp-server/.npmrc ./npm/kubernetes-mcp-server/LICENSE ./npm/kubernetes-mcp-server/README.md
+CLEAN_TARGETS += ./npm/rh-tam-kubernetes-mcp-server/.npmrc ./npm/rh-tam-kubernetes-mcp-server/LICENSE ./npm/rh-tam-kubernetes-mcp-server/README.md
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/.npmrc))
 
 # The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
@@ -51,16 +51,26 @@ build: clean tidy format ## Build the project
 .PHONY: build-all-platforms
 build-all-platforms: clean tidy format ## Build the project for all platforms
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
+		$(info Building for $(os)-$(arch)...) \
 		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 
+# Individual platform builds for local testing
+define BUILD_PLATFORM_TEMPLATE
+.PHONY: build-$(1)-$(2)
+build-$(1)-$(2): clean tidy format ## Build for $(1)-$(2)
+	@echo "Building for $(1)-$(2)..."
+	GOOS=$(1) GOARCH=$(2) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(1)-$(2)$(if $(findstring windows,$(1)),.exe,) ./cmd/kubernetes-mcp-server
+endef
+
+$(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(eval $(call BUILD_PLATFORM_TEMPLATE,$(os),$(arch)))))
+
 .PHONY: npm-copy-binaries
-npm-copy-binaries: build-all-platforms ## Copy the binaries to each npm package
+npm-copy-binaries: build-all-platforms ## Copy the binaries to the main npm package
+	mkdir -p ./npm/$(BINARY_NAME)/bin
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		EXECUTABLE=./$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
-		DIRNAME=$(BINARY_NAME)-$(os)-$(arch); \
-		mkdir -p ./npm/$$DIRNAME/bin; \
-		cp $$EXECUTABLE ./npm/$$DIRNAME/bin/; \
+		cp $$EXECUTABLE ./npm/$(BINARY_NAME)/bin/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
 	))
 
 .PHONY: npm-publish
@@ -69,15 +79,14 @@ npm-publish: npm-copy-binaries ## Publish the npm packages
 		DIRNAME="$(BINARY_NAME)-$(os)-$(arch)"; \
 		cd npm/$$DIRNAME; \
 		echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' >> .npmrc; \
-		jq '.version = "$(NPM_VERSION)"' package.json > tmp.json && mv tmp.json package.json; \
+		jq '.version = "$(NPM_VERSION)" | .bin = {"$(BINARY_NAME)-$(os)-$(arch)": "bin/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)"} | .files = ["bin/"]' package.json > tmp.json && mv tmp.json package.json; \
 		npm publish; \
 		cd ../..; \
 	))
-	cp README.md LICENSE ./npm/kubernetes-mcp-server/
-	echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' >> ./npm/kubernetes-mcp-server/.npmrc
-	jq '.version = "$(NPM_VERSION)"' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	jq '.optionalDependencies |= with_entries(.value = "$(NPM_VERSION)")' ./npm/kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/kubernetes-mcp-server/package.json; \
-	cd npm/kubernetes-mcp-server && npm publish
+	cp README.md LICENSE ./npm/rh-tam-kubernetes-mcp-server/
+	echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' >> ./npm/rh-tam-kubernetes-mcp-server/.npmrc
+	jq '.version = "$(NPM_VERSION)" | .optionalDependencies |= with_entries(.value = "$(NPM_VERSION)")' ./npm/rh-tam-kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/rh-tam-kubernetes-mcp-server/package.json; \
+	cd npm/rh-tam-kubernetes-mcp-server && npm publish
 
 .PHONY: python-publish
 python-publish: ## Publish the python packages

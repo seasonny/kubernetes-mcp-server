@@ -10,15 +10,17 @@ npm/kubernetes-mcp-server/README.md
 npm/kubernetes-mcp-server/LICENSE
 !npm/kubernetes-mcp-server
 kubernetes-mcp-server-darwin-amd64
-!npm/kubernetes-mcp-server-darwin-amd64/
+npm/kubernetes-mcp-server-darwin-amd64/bin/rh-tam-kubernetes-mcp-server-darwin-amd64
 kubernetes-mcp-server-darwin-arm64
-!npm/kubernetes-mcp-server-darwin-arm64
+npm/kubernetes-mcp-server-darwin-arm64/bin/rh-tam-kubernetes-mcp-server-darwin-arm64
 kubernetes-mcp-server-linux-amd64
-!npm/kubernetes-mcp-server-linux-amd64
+npm/kubernetes-mcp-server-linux-amd64/bin/rh-tam-kubernetes-mcp-server-linux-amd64
 kubernetes-mcp-server-linux-arm64
-!npm/kubernetes-mcp-server-linux-arm64
+npm/kubernetes-mcp-server-linux-arm64/bin/rh-tam-kubernetes-mcp-server-linux-arm64
 kubernetes-mcp-server-windows-amd64.exe
+npm/kubernetes-mcp-server-windows-amd64/bin/rh-tam-kubernetes-mcp-server-windows-amd64.exe
 kubernetes-mcp-server-windows-arm64.exe
+npm/kubernetes-mcp-server-windows-arm64/bin/rh-tam-kubernetes-mcp-server-windows-arm64.exe
 
 python/.venv/
 python/build/

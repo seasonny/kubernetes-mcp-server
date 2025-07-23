@@ -1,0 +1,18 @@
+{
+  "name": "rh-tam-kubernetes-mcp-server-darwin-arm64",
+  "version": "0.1.10",
+  "description": "Model Context Protocol (MCP) server for Kubernetes and OpenShift",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "bin": {
+    "rh-tam-kubernetes-mcp-server-darwin-arm64": "bin/rh-tam-kubernetes-mcp-server-darwin-arm64"
+  },
+  "files": [
+    "bin/"
+  ]
+}
