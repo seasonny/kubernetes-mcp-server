@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/manusa/kubernetes-mcp-server/pkg/kubernetes"
 	"github.com/manusa/kubernetes-mcp-server/pkg/version"
@@ -38,7 +39,9 @@ func NewSever(configuration Configuration) (*Server, error) {
 			server.WithToolCapabilities(true),
 			server.WithLogging(),
 		),
-		httpClient: &http.Client{},
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 	s.getOpenShiftVersionFunc = s.getOpenShiftVersion
 	if err := s.reloadKubernetesClient(); err != nil {
