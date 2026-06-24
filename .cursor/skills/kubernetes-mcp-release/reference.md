@@ -13,7 +13,20 @@
 - [ ] npm view rh-tam-kubernetes-mcp-server@<VERSION>
 ```
 
-## GitHub push
+## npm/ 與 .gitignore
+
+**不要**把整個 `npm/` 加進 `.gitignore`。
+
+| 路徑 | 進 git？ | 原因 |
+|------|----------|------|
+| `npm/**/package.json` | ✅ 要 | 套件定義（名稱、版本、optionalDependencies） |
+| `npm/**/bin/index.js` | ✅ 要 | npx 啟動器（原始碼） |
+| `npm/**/bin/rh-tam-*` | ❌ 不要 | 編譯出的二進位（`make npm-copy-binaries` 產生） |
+| `npm/**/.npmrc` | ❌ 不要 | npm token |
+
+`.gitignore` 只影響**尚未被追蹤**的檔案。若 `package.json` 已在 git 裡，就算加了 `npm/` 到 gitignore，**仍會看到變更**——git 繼續追蹤已 index 的檔案。要停止追蹤需 `git rm --cached`（`package.json` 不建議這樣做）。
+
+發布後 `package.json` 版本變更是正常的：`release.sh` 會用 `bump-npm-version.sh` 寫入新版本，應 commit 進 repo。
 
 ```bash
 git status

@@ -11,17 +11,30 @@ description: >-
 
 ## Quick path
 
-From repo root:
+From repo root (you choose the version; everything else is scripted):
 
 ```bash
 # 1. Preflight only (safe, no publish)
 ./scripts/release-check.sh
 
-# 2. Full release (prompts for version, runs tests + build + publish)
+# 2. Full release: bump package.json → test → build → publish → verify
 ./scripts/release.sh 0.1.15
 ```
 
+`release.sh` does **not** pick the version for you. Pass semver as the only argument.
+
 Read [reference.md](reference.md) for GitHub push, auth modes, and troubleshooting.
+
+## What is automated vs manual
+
+| Step | Who |
+|------|-----|
+| Choose version (e.g. `0.1.15`) | **You** |
+| Bump all `npm/rh-tam-*/package.json` | `bump-npm-version.sh` (called by `release.sh`) |
+| Tests, build all platforms, npm publish | `release.sh` |
+| Git commit / tag / push | **You** (commands printed at end) |
+
+Skill does not run by itself — say「用 kubernetes-mcp-release 發布 0.1.15」or run the scripts.
 
 ## Agent workflow
 

@@ -20,6 +20,10 @@ fi
 echo "=== release $VERSION ==="
 echo
 
+# Sync version in tracked package.json (so git matches what we publish)
+"$ROOT/scripts/bump-npm-version.sh" "$VERSION"
+echo
+
 # Preflight
 "$ROOT/scripts/release-check.sh"
 echo
@@ -72,6 +76,8 @@ else
 fi
 
 echo
-echo "Done. Optional:"
-echo "  git tag v${VERSION} && git push origin v${VERSION}"
+echo "Done."
+echo "  git add npm/rh-tam-kubernetes-mcp-server*/package.json"
+echo "  git commit -m \"chore(release): v${VERSION}\""
+echo "  git tag v${VERSION} && git push origin main --tags"
 echo "  npx -y rh-tam-kubernetes-mcp-server@${VERSION} --version"

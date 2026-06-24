@@ -1,6 +1,6 @@
 {
   "name": "rh-tam-kubernetes-mcp-server-linux-arm64",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Model Context Protocol (MCP) server for Kubernetes and OpenShift",
   "os": [
     "linux"

@@ -5,6 +5,7 @@ node_modules/
 .npmrc
 rh-tam-kubernetes-mcp-server*
 dist/
+npm/**/bin/
 tmp.json
 
 # Exclude Binaries in npm folders as they should be generated
