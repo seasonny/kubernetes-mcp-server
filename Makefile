@@ -84,13 +84,13 @@ npm-publish: npm-copy-binaries ## Publish the npm packages
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		DIRNAME="$(BINARY_NAME)-$(os)-$(arch)"; \
 		cd npm/$$DIRNAME; \
-		echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' >> .npmrc; \
+		if [ -n "$(NPM_TOKEN)" ]; then echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' > .npmrc; fi; \
 		jq '.version = "$(NPM_VERSION)" | .bin = {"$(BINARY_NAME)-$(os)-$(arch)": "bin/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)"} | .files = ["bin/"]' package.json > tmp.json && mv tmp.json package.json; \
 		npm publish; \
 		cd ../..; \
 	))
 	cp README.md LICENSE ./npm/rh-tam-kubernetes-mcp-server/
-	echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' >> ./npm/rh-tam-kubernetes-mcp-server/.npmrc
+	if [ -n "$(NPM_TOKEN)" ]; then echo '//registry.npmjs.org/:_authToken=$(NPM_TOKEN)' > ./npm/rh-tam-kubernetes-mcp-server/.npmrc; fi
 	jq '.version = "$(NPM_VERSION)" | .optionalDependencies |= with_entries(.value = "$(NPM_VERSION)")' ./npm/rh-tam-kubernetes-mcp-server/package.json > tmp.json && mv tmp.json ./npm/rh-tam-kubernetes-mcp-server/package.json; \
 	cd npm/rh-tam-kubernetes-mcp-server && npm publish
 
