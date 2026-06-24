@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -114,6 +115,18 @@ func NewTextResult(content string, err error) *mcp.CallToolResult {
 			},
 		},
 	}
+}
+
+// NewJSONResult marshals payload as JSON text for MCP tool responses (Case Agent contract).
+func NewJSONResult(payload any, err error) *mcp.CallToolResult {
+	if err != nil {
+		return NewTextResult("", err)
+	}
+	data, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		return NewTextResult("", marshalErr)
+	}
+	return NewTextResult(string(data), nil)
 }
 
 func contextFunc(ctx context.Context, r *http.Request) context.Context {

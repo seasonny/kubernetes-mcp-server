@@ -13,20 +13,24 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// Case represents a Red Hat support case.
+// Case represents a Red Hat support case (Hydra getCase).
 type Case struct {
-	CaseNumber   string `json:"caseNumber,omitempty"`
-	Product      string `json:"product,omitempty"`
-	Version      string `json:"version,omitempty"`
-	CaseType     string `json:"caseType,omitempty"`
-	Description  string `json:"description,omitempty"`
-	Environment  string `json:"environment,omitempty"`
-	CaseLanguage string `json:"caseLanguage,omitempty"`
-	Severity     int    `json:"severity,omitempty"`
-	Summary      string `json:"summary,omitempty"`
-	Status       string `json:"status,omitempty"`
-	CreatedBy    string `json:"createdBy,omitempty"`
-	CreatedDate  string `json:"createdDate,omitempty"`
+	CaseNumber              string `json:"caseNumber,omitempty"`
+	Product                 string `json:"product,omitempty"`
+	Version                 string `json:"version,omitempty"`
+	CaseType                string `json:"caseType,omitempty"`
+	Description             string `json:"description,omitempty"`
+	Environment             string `json:"environment,omitempty"`
+	CaseLanguage            string `json:"caseLanguage,omitempty"`
+	Severity                any    `json:"severity,omitempty"`
+	Summary                 string `json:"summary,omitempty"`
+	Status                  string `json:"status,omitempty"`
+	CreatedBy               string `json:"createdBy,omitempty"`
+	CreatedDate             string `json:"createdDate,omitempty"`
+	LastModifiedDate        string `json:"lastModifiedDate,omitempty"`
+	OpenshiftClusterID      string `json:"openshiftClusterID,omitempty"`
+	OpenshiftClusterVersion string `json:"openshiftClusterVersion,omitempty"`
+	ResolutionDescription   any    `json:"resolutionDescription,omitempty"`
 }
 
 // CaseCreationResponse represents the response after creating a case.
@@ -176,8 +180,5 @@ func (s *Server) readCaseFromRedHatPortal(ctx context.Context, request mcp.CallT
 		return NewTextResult("", fmt.Errorf("failed to get case: %w", err)), nil
 	}
 
-	result := fmt.Sprintf("Case Number: %s\nSummary: %s\nStatus: %s\nProduct: %s\nVersion: %s\nSeverity: %d\nCreated Date: %s\nCreated By: %s\n\nDescription:\n%s\n",
-		caseData.CaseNumber, caseData.Summary, caseData.Status, caseData.Product, caseData.Version, caseData.Severity, caseData.CreatedDate, caseData.CreatedBy, caseData.Description)
-
-	return NewTextResult(result, nil), nil
+	return NewJSONResult(caseData, nil), nil
 }

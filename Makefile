@@ -22,10 +22,10 @@ ARCHS = amd64 arm64
 
 CLEAN_TARGETS :=
 CLEAN_TARGETS += '$(BINARY_NAME)'
-CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,)))
-CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/bin/))
+CLEAN_TARGETS += dist/
 CLEAN_TARGETS += ./npm/rh-tam-kubernetes-mcp-server/.npmrc ./npm/rh-tam-kubernetes-mcp-server/LICENSE ./npm/rh-tam-kubernetes-mcp-server/README.md
 CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/.npmrc))
+CLEAN_TARGETS += $(foreach os,$(OSES),$(foreach arch,$(ARCHS),./npm/$(BINARY_NAME)-$(os)-$(arch)/bin/))
 
 # The help will print out all targets with their descriptions organized bellow their categories. The categories are represented by `##@` and the target descriptions by `##`.
 # The awk commands is responsible to read the entire set of makefiles included in this invocation, looking for lines of the file as xyz: ## something, and then pretty-format the target and help. Then, if there's a line with ##@ something, that gets pretty-printed as a category.
@@ -44,23 +44,26 @@ clean: ## Clean up all build artifacts
 	rm -rf $(CLEAN_TARGETS)
 
 .PHONY: build
-build: clean tidy format ## Build the project
-	go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME) ./cmd/kubernetes-mcp-server
+build: tidy format ## Build the project
+	mkdir -p dist
+	go build $(COMMON_BUILD_ARGS) -o dist/$(BINARY_NAME) ./cmd/kubernetes-mcp-server
 
 
 .PHONY: build-all-platforms
-build-all-platforms: clean tidy format ## Build the project for all platforms
+build-all-platforms: tidy format ## Build the project for all platforms
+	mkdir -p dist
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
 		$(info Building for $(os)-$(arch)...) \
-		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
+		GOOS=$(os) GOARCH=$(arch) go build $(COMMON_BUILD_ARGS) -o dist/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,) ./cmd/kubernetes-mcp-server; \
 	))
 
 # Individual platform builds for local testing
 define BUILD_PLATFORM_TEMPLATE
 .PHONY: build-$(1)-$(2)
-build-$(1)-$(2): clean tidy format ## Build for $(1)-$(2)
+build-$(1)-$(2): tidy format ## Build for $(1)-$(2)
 	@echo "Building for $(1)-$(2)..."
-	GOOS=$(1) GOARCH=$(2) go build $(COMMON_BUILD_ARGS) -o $(BINARY_NAME)-$(1)-$(2)$(if $(findstring windows,$(1)),.exe,) ./cmd/kubernetes-mcp-server
+	mkdir -p dist
+	GOOS=$(1) GOARCH=$(2) go build $(COMMON_BUILD_ARGS) -o dist/$(BINARY_NAME)-$(1)-$(2)$(if $(findstring windows,$(1)),.exe,) ./cmd/kubernetes-mcp-server
 endef
 
 $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(eval $(call BUILD_PLATFORM_TEMPLATE,$(os),$(arch)))))
@@ -69,8 +72,11 @@ $(foreach os,$(OSES),$(foreach arch,$(ARCHS),$(eval $(call BUILD_PLATFORM_TEMPLA
 npm-copy-binaries: build-all-platforms ## Copy the binaries to the main npm package
 	mkdir -p ./npm/$(BINARY_NAME)/bin
 	$(foreach os,$(OSES),$(foreach arch,$(ARCHS), \
-		EXECUTABLE=./$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
+		EXECUTABLE=./dist/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
+		SUBPACKAGE_DIR=./npm/$(BINARY_NAME)-$(os)-$(arch)/bin; \
+		mkdir -p $$SUBPACKAGE_DIR; \
 		cp $$EXECUTABLE ./npm/$(BINARY_NAME)/bin/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
+		cp $$EXECUTABLE $$SUBPACKAGE_DIR/$(BINARY_NAME)-$(os)-$(arch)$(if $(findstring windows,$(os)),.exe,); \
 	))
 
 .PHONY: npm-publish

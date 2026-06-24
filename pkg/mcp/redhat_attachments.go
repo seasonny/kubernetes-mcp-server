@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -94,6 +95,67 @@ func (s *Server) uploadAttachment(apiURL, accessToken, caseNumber, filePath stri
 	}
 
 	return &attachments[0], nil
+}
+
+type caseAttachmentsResponse struct {
+	Attachments []Attachment `json:"attachments"`
+}
+
+// listAttachments lists attachments for a support case.
+func (s *Server) listAttachments(apiURL, accessToken, caseNumber string) ([]Attachment, error) {
+	reqURL := apiURL + "/cases/" + url.PathEscape(caseNumber) + "/attachments"
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	client := s.httpClient
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to list attachments, status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	var attachments []Attachment
+	if err := json.Unmarshal(bodyBytes, &attachments); err != nil {
+		return nil, err
+	}
+
+	return attachments, nil
+}
+
+func (s *Server) listCaseAttachmentsFromRedHatPortal(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	caseNumber, ok := request.GetArguments()["case-number"].(string)
+	if !ok || caseNumber == "" {
+		return nil, errors.New("case-number is a required field")
+	}
+
+	referenceToken, err := getRefreshToken()
+	if err != nil {
+		return NewTextResult("", err), nil
+	}
+
+	accessToken, err := s.getAccessToken(rhSSOURL, referenceToken)
+	if err != nil {
+		return NewTextResult("", fmt.Errorf("failed to get access token: %w", err)), nil
+	}
+
+	attachments, err := s.listAttachments(rhAPIURL, accessToken, caseNumber)
+	if err != nil {
+		return NewTextResult("", fmt.Errorf("failed to list attachments: %w", err)), nil
+	}
+
+	return NewJSONResult(caseAttachmentsResponse{Attachments: attachments}, nil), nil
 }
 
 func (s *Server) uploadAttachmentToRedHatPortal(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

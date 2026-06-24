@@ -8,22 +8,77 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
 
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// Comment represents a comment on a Red Hat support case.
-type Comment struct {
-	Text        string `json:"commentBody"`
-	Public      *bool  `json:"public,omitempty"`
-	CreatedBy   string `json:"createdBy,omitempty"`
-	CreatedDate string `json:"createdDate,omitempty"`
+// CaseComment represents a Hydra CaseComment (docs/mcp_case_api_integration.md §4.1).
+type CaseComment struct {
+	ID                string `json:"id,omitempty"`
+	CaseNumber        string `json:"caseNumber,omitempty"`
+	CommentBody       string `json:"commentBody,omitempty"`
+	CreatedDate       string `json:"createdDate,omitempty"`
+	PublishedDate     string `json:"publishedDate,omitempty"`
+	CreatedBy         string `json:"createdBy,omitempty"`
+	CreatedByType     string `json:"createdByType,omitempty"`
+	ContentType       string `json:"contentType,omitempty"`
+	IsDraft           bool   `json:"isDraft,omitempty"`
+	DoNotChangeStatus bool   `json:"doNotChangeStatus,omitempty"`
+}
+
+type caseCommentsResponse struct {
+	Comments []CaseComment `json:"comments"`
+	Source   string        `json:"source"`
+}
+
+type caseCommentQuery struct {
+	StartDate string
+	EndDate   string
+	SortField string
+	SortOrder string
+}
+
+func parseCaseCommentQuery(args map[string]any) caseCommentQuery {
+	q := caseCommentQuery{}
+	if v, ok := args["start-date"].(string); ok {
+		q.StartDate = v
+	}
+	if v, ok := args["end-date"].(string); ok {
+		q.EndDate = v
+	}
+	if v, ok := args["sort-field"].(string); ok {
+		q.SortField = v
+	}
+	if v, ok := args["sort-order"].(string); ok {
+		q.SortOrder = v
+	}
+	return q
 }
 
 // getCaseComments retrieves all comments for a specific support case.
-func (s *Server) getCaseComments(apiURL, accessToken, caseNumber string) ([]Comment, error) {
-	req, err := http.NewRequest("GET", apiURL+"/cases/"+caseNumber+"/comments", nil)
+func (s *Server) getCaseComments(apiURL, accessToken, caseNumber string, query caseCommentQuery) ([]CaseComment, error) {
+	reqURL := apiURL + "/cases/" + url.PathEscape(caseNumber) + "/comments"
+	parsed, err := url.Parse(reqURL)
+	if err != nil {
+		return nil, err
+	}
+	params := parsed.Query()
+	if query.StartDate != "" {
+		params.Set("startDate", query.StartDate)
+	}
+	if query.EndDate != "" {
+		params.Set("endDate", query.EndDate)
+	}
+	if query.SortField != "" {
+		params.Set("sortField", query.SortField)
+	}
+	if query.SortOrder != "" {
+		params.Set("sortOrder", query.SortOrder)
+	}
+	parsed.RawQuery = params.Encode()
+
+	req, err := http.NewRequest("GET", parsed.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -36,13 +91,17 @@ func (s *Server) getCaseComments(apiURL, accessToken, caseNumber string) ([]Comm
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to get case comments, status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var comments []Comment
-	if err := json.NewDecoder(resp.Body).Decode(&comments); err != nil {
+	var comments []CaseComment
+	if err := json.Unmarshal(bodyBytes, &comments); err != nil {
 		return nil, err
 	}
 
@@ -50,18 +109,17 @@ func (s *Server) getCaseComments(apiURL, accessToken, caseNumber string) ([]Comm
 }
 
 // addCaseComment adds a new comment to a specific support case.
-func (s *Server) addCaseComment(apiURL, accessToken, caseNumber, text string, public bool) (*Comment, error) {
-	commentData := struct {
-		CommentBody string `json:"commentBody"`
-	}{
-		CommentBody: text,
+func (s *Server) addCaseComment(apiURL, accessToken, caseNumber, text string, doNotChangeStatus bool) (*CaseComment, error) {
+	commentData := CaseComment{
+		CommentBody:       text,
+		DoNotChangeStatus: doNotChangeStatus,
 	}
 	jsonData, err := json.Marshal(commentData)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", apiURL+"/cases/"+caseNumber+"/comments", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequest("POST", apiURL+"/cases/"+url.PathEscape(caseNumber)+"/comments", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, err
 	}
@@ -75,13 +133,17 @@ func (s *Server) addCaseComment(apiURL, accessToken, caseNumber, text string, pu
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusCreated {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("failed to add case comment, status code: %d, body: %s", resp.StatusCode, string(bodyBytes))
 	}
 
-	var newComment Comment
-	if err := json.NewDecoder(resp.Body).Decode(&newComment); err != nil {
+	var newComment CaseComment
+	if err := json.Unmarshal(bodyBytes, &newComment); err != nil {
 		return nil, err
 	}
 
@@ -104,26 +166,16 @@ func (s *Server) readCaseCommentsFromRedHatPortal(ctx context.Context, request m
 		return NewTextResult("", fmt.Errorf("failed to get access token: %w", err)), nil
 	}
 
-	comments, err := s.getCaseComments(rhAPIURL, accessToken, caseNumber)
+	query := parseCaseCommentQuery(request.GetArguments())
+	comments, err := s.getCaseComments(rhAPIURL, accessToken, caseNumber, query)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to get case comments: %w", err)), nil
 	}
 
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Comments for Case %s:\n\n", caseNumber))
-	if len(comments) == 0 {
-		sb.WriteString("No comments found.")
-	} else {
-		for i, c := range comments {
-			visibility := "Private"
-			if c.Public != nil && *c.Public {
-				visibility = "Public"
-			}
-			sb.WriteString(fmt.Sprintf("[%d] %s (%s, %s):\n%s\n\n", i+1, c.CreatedBy, c.CreatedDate, visibility, c.Text))
-		}
-	}
-
-	return NewTextResult(sb.String(), nil), nil
+	return NewJSONResult(caseCommentsResponse{
+		Comments: comments,
+		Source:   "hydra:getCaseComments",
+	}, nil), nil
 }
 
 func (s *Server) addCaseCommentToRedHatPortal(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -136,10 +188,9 @@ func (s *Server) addCaseCommentToRedHatPortal(ctx context.Context, request mcp.C
 		return nil, errors.New("text is a required field")
 	}
 
-	// Default to public as per user request
-	public := true
-	if p, ok := request.GetArguments()["public"].(bool); ok {
-		public = p
+	doNotChangeStatus := true
+	if v, ok := request.GetArguments()["do-not-change-status"].(bool); ok {
+		doNotChangeStatus = v
 	}
 
 	referenceToken, err := getRefreshToken()
@@ -152,10 +203,10 @@ func (s *Server) addCaseCommentToRedHatPortal(ctx context.Context, request mcp.C
 		return NewTextResult("", fmt.Errorf("failed to get access token: %w", err)), nil
 	}
 
-	comment, err := s.addCaseComment(rhAPIURL, accessToken, caseNumber, text, public)
+	comment, err := s.addCaseComment(rhAPIURL, accessToken, caseNumber, text, doNotChangeStatus)
 	if err != nil {
 		return NewTextResult("", fmt.Errorf("failed to add comment: %w", err)), nil
 	}
 
-	return NewTextResult(fmt.Sprintf("Comment added successfully to Case %s.\nVisibility: %v\nText: %s", caseNumber, comment.Public, comment.Text), nil), nil
+	return NewJSONResult(comment, nil), nil
 }

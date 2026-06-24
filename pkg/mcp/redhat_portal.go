@@ -87,6 +87,10 @@ func (s *Server) initRedHatPortal() []server.ServerTool {
 				"read_case_comments_rh_portal",
 				mcp.WithDescription("Retrieves all comments for a specific support case from the Red Hat Customer Portal."),
 				mcp.WithString("case-number", mcp.Description("The Red Hat Portal case number."), mcp.Required()),
+				mcp.WithString("start-date", mcp.Description("ISO 8601 start date for incremental polling (maps to startDate).")),
+				mcp.WithString("end-date", mcp.Description("ISO 8601 end date (maps to endDate).")),
+				mcp.WithString("sort-field", mcp.Description("Sort field, e.g. createdDate (maps to sortField).")),
+				mcp.WithString("sort-order", mcp.Description("Sort order: asc or desc (maps to sortOrder).")),
 			),
 			Handler: s.readCaseCommentsFromRedHatPortal,
 		},
@@ -97,8 +101,17 @@ func (s *Server) initRedHatPortal() []server.ServerTool {
 				mcp.WithString("case-number", mcp.Description("The Red Hat Portal case number."), mcp.Required()),
 				mcp.WithString("text", mcp.Description("The text of the comment."), mcp.Required()),
 				mcp.WithBoolean("public", mcp.Description("Whether the comment should be public (visible to support). Defaults to true.")),
+				mcp.WithBoolean("do-not-change-status", mcp.Description("When true, do not change case status on comment (maps to doNotChangeStatus). Defaults to true.")),
 			),
 			Handler: s.addCaseCommentToRedHatPortal,
+		},
+		{
+			Tool: mcp.NewTool(
+				"list_case_attachments_rh_portal",
+				mcp.WithDescription("Lists attachments for a specific support case from the Red Hat Customer Portal."),
+				mcp.WithString("case-number", mcp.Description("The Red Hat Portal case number."), mcp.Required()),
+			),
+			Handler: s.listCaseAttachmentsFromRedHatPortal,
 		},
 		{
 			Tool: mcp.NewTool(
